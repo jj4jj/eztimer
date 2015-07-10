@@ -27,6 +27,7 @@
 struct timer_event {
     uint32_t    ud;
     uint16_t    sz;
+    uint32_t    period;
     char        data[1];
 };
 
@@ -57,6 +58,13 @@ struct timer {
 
 #define MM_ALLOC(sz)    malloc((sz))
 #define MM_FREE(p)      free((p))
+#if defined(ENABLE_DEBUG)
+    #define debug_print(ARGS...)    fprintf(stderr,##ARGS);
+#else
+    #define debug_print(ARGS...)    (void)
+#endif
+
+
 
 static struct timer * TI = NULL;
 
@@ -143,6 +151,8 @@ static struct timer_node * timer_add(struct timer *T, uint32_t ud,const void * c
     timer_event * ev = (timer_event*)(node+1);    
     ev->ud = ud;
     ev->sz = sz;
+    ev->period = (time < 0)?-time:0;
+    time = (time < 0 )? -time : time;
 	memcpy(ev->data, cb, sz);
     ev->data[sz] = 0;//dump ez
 
@@ -198,7 +208,17 @@ static inline void timer_execute(struct timer *T) {
             T->dispather(event->ud, event->data, event->sz);
     		struct timer_node * temp = current;
     		current=current->next;
-    		MM_FREE(temp);	
+            if(event->period > 0)
+            {
+                //update expired
+                temp->next = NULL;
+                temp->expire = TI->time + event->period;
+                add_node(TI, temp );
+            }
+            else
+            {
+    		    MM_FREE(temp);
+            }
     	} while (current);
 
 		LOCK(T);
@@ -243,13 +263,31 @@ static struct timer * timer_create_timer()
 	return r;
 }
 
-eztimer_id_t            eztimer_run(int time, uint32_t ud,const void * cb, int sz){
+eztimer_id_t            eztimer_run_after(int time, uint32_t ud,const void * cb, int sz){
     //tick
+    if(time < 0)
+    {
+        return E_EZTMR_TIME_INVALID;
+    }
     time /= 10;
 	if (time == 0) {
         TI->dispather(ud, cb, sz);
 	} else {
 		return (eztimer_id_t)(timer_add(TI, ud, cb, sz, time));
+	}
+}
+eztimer_id_t            eztimer_run_every(int time, uint32_t ud,const void * cb, int sz){
+    if(time < 0)
+    {
+        return E_EZTMR_TIME_INVALID;
+    }
+    //tick
+    time /= 10;
+	if (time == 0) {
+        TI->dispather(ud, cb, sz);
+        return eztimer_run_after(1,ud,cb,sz);
+	} else {
+		return (eztimer_id_t)(timer_add(TI, ud, cb, sz, -time));
 	}
 }
 int						eztimer_cancel(eztimer_id_t tid)
