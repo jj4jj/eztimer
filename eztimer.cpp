@@ -144,6 +144,7 @@ static struct timer_node * timer_add(struct timer *T, uint32_t ud,const void * c
     ev->ud = ud;
     ev->sz = sz;
 	memcpy(ev->data, cb, sz);
+    ev->data[sz] = 0;//dump ez
 
 	LOCK(T);
 		node->expire=time+T->time;
