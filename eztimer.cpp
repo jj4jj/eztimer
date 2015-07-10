@@ -1,8 +1,8 @@
 #include "eztimer.h"
-#include <time.h>
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #if defined(__APPLE__)
 #include <sys/time.h>
@@ -76,25 +76,17 @@ static inline void link(struct link_list *list,struct timer_node *node) {
 
 static inline int unlink(struct link_list *list,struct timer_node *node) {
     //todo change to double list
-    struct timer_node * prev = NULL, * found = list->head;
-    while(found != node)
+    struct timer_node * prev = &(list->head), * found = list->head.next;
+    while(found && found != node)
     {
         prev = found;
         found = found->next;
     }
     if(found == node)
     {                    
-        if(prev)
-        {
-            prev->next = node->next;
-        }
-        else
-        {
-            list->head = node->next;
-        }        
+        prev->next = node->next;
         if(found == list->tail)
         {
-            //prev is not null , if is null , head remove , tail is null
             list->tail = prev;            
         }
         MM_FREE(node);
@@ -141,11 +133,11 @@ static int remove_node(struct timer *T,struct timer_node *node) {
 			}
 			mask <<= TIME_LEVEL_SHIFT;
 		}
- 		return unlink[i][((time>>(TIME_NEAR_SHIFT + i*TIME_LEVEL_SHIFT)) & TIME_LEVEL_MASK)],node);	
+		return unlink(&T->t[i][((time>>(TIME_NEAR_SHIFT + i*TIME_LEVEL_SHIFT)) & TIME_LEVEL_MASK)],node);	
 	}
 }
 
-static struct timer_node * timer_add(struct timer *T, uint32_t ud, void * cb,int sz,int time) {
+static struct timer_node * timer_add(struct timer *T, uint32_t ud,const void * cb,int sz,int time) {
     
 	struct timer_node *node = (struct timer_node *)MM_ALLOC(sizeof(*node)+ sizeof(timer_event) + sz);
     timer_event * ev = (timer_event*)(node+1);    
@@ -250,7 +242,9 @@ static struct timer * timer_create_timer()
 	return r;
 }
 
-eztimer_id_t            eztimer_run(int time, uint32_t ud, void * cb, int sz){
+eztimer_id_t            eztimer_run(int time, uint32_t ud,const void * cb, int sz){
+    //tick
+    time /= 10;
 	if (time == 0) {
         TI->dispather(ud, cb, sz);
 	} else {
@@ -301,16 +295,18 @@ gettime() {
 #endif
 	return t;
 }
-#define _eztimer_set_error_msg(tmr,...ARGS) \do{
+
+
+#define _timer_set_error_msg(tmr, ARGS...)   do{\
     snprintf((tmr)->last_error_msg,sizeof((tmr)->last_error_msg),##ARGS);\
 }while(0)
 
 
-int eztimer_update(void) 
+int eztimer_update() 
 {
 	uint64_t cp = gettime();
 	if(cp < TI->current_point) {
-		_eztimer_set_error_msg(TI,"time diff error: change from %lld to %lld",
+		_timer_set_error_msg(TI,"time diff error: change from %lu to %lu",
             cp, TI->current_point);
 		TI->current_point = cp;
         return E_EZTMR_TIME_BACK;
@@ -359,8 +355,7 @@ const char *            eztimer_get_last_error()
 {
     return TI->last_error_msg;
 }
-
-
-
-
-
+uint64_t                eztimer_ms()
+{
+    return TI->current_point*10;
+}
